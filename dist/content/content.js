@@ -32,25 +32,29 @@ class MessageExtractor {
           const usernameElement = header?.querySelector("span");
           const timestampElement = contents.querySelector("time");
 
+          // Create a clone to prevent modifying the actual DOM
+          const contentsClone = contents.cloneNode(true);
+
           // Exclude reply bar content
-          const replyBar = contents.querySelector('[class*="replyBar-"]');
+          const replyBar =
+            contentsClone.querySelector('[class*="replyBar-"]') ||
+            contentsClone.querySelector('[class*="repliedMessage"]') ||
+            contentsClone.querySelector('[class*="referencedMessage"]');
+
           if (replyBar) {
-            replyBar.remove(); // Remove temporarily to not include in text content
+            replyBar.remove(); // Remove from the clone
           }
 
-          const contentElement = contents.querySelector(
-            'div[id^="message-content-"]'
-          );
+          // Get content element from the modified clone
+          const contentElement =
+            contentsClone.querySelector('div[id^="message-content-"]') ||
+            contentsClone.querySelector('[class*="message-content-"]') ||
+            contentsClone.querySelector('[class*="messageContent-"]');
 
           if (usernameElement) author = usernameElement.textContent || author;
           if (timestampElement)
             timestamp = timestampElement.getAttribute("datetime");
           if (contentElement) content = contentElement.textContent || "";
-
-          // Add reply bar back if we removed it
-          if (replyBar && replyBar.parentNode) {
-            contents.appendChild(replyBar);
-          }
 
           // If no author found but we have previous author and this looks like a sequence
           if (
@@ -69,25 +73,27 @@ class MessageExtractor {
       const usernameElement = element.querySelector('[class*="username-"]');
       const timestampElement = element.querySelector("time[datetime]");
 
-      // Handle reply content correctly
-      const replyBar = element.querySelector('[class*="replyBar-"]');
+      // Clone the element to avoid modifying the DOM
+      const elementClone = element.cloneNode(true);
+
+      // Handle reply content correctly - multiple possible classes
+      const replyBar =
+        elementClone.querySelector('[class*="replyBar-"]') ||
+        elementClone.querySelector('[class*="repliedMessage"]') ||
+        elementClone.querySelector('[class*="referencedMessage"]');
+
       if (replyBar) {
-        replyBar.remove(); // Remove temporarily
+        replyBar.remove(); // Remove from the clone
       }
 
       const contentElement =
-        element.querySelector('[class*="message-content-"]') ||
-        element.querySelector('[class*="messageContent-"]');
+        elementClone.querySelector('[class*="message-content-"]') ||
+        elementClone.querySelector('[class*="messageContent-"]');
 
       if (usernameElement) author = usernameElement.textContent || author;
       if (timestampElement)
         timestamp = timestampElement.getAttribute("datetime");
       if (contentElement) content = contentElement.textContent || "";
-
-      // Add reply bar back if we removed it
-      if (replyBar && replyBar.parentNode) {
-        element.appendChild(replyBar);
-      }
 
       // If no author found but we have previous author and this looks like a sequence
       if (
@@ -103,9 +109,19 @@ class MessageExtractor {
         return { id, author, timestamp, content, isPartOfSequence };
       }
 
-      // Method 3: General approach
+      // Method 3: General approach - for hard to parse messages
+      // First - handle any reply reference that might be in the way
+      const elementForContentExtraction = element.cloneNode(true);
+
+      // Remove any reply-related elements
+      const replyElements = elementForContentExtraction.querySelectorAll(
+        '[class*="replyBar-"],[class*="repliedMessage"],[class*="referencedMessage"],[class*="repliedTextContent"],[class*="repliedTextPreview"]'
+      );
+
+      replyElements.forEach((el) => el.remove());
+
       // Find all spans, one might be the username
-      const spans = element.querySelectorAll("span");
+      const spans = elementForContentExtraction.querySelectorAll("span");
       for (const span of spans) {
         if (
           span.className.includes("username") ||
@@ -116,17 +132,25 @@ class MessageExtractor {
         }
       }
 
-      // Get all text content as a fallback, but exclude reply content
-      if (!content) {
-        // Clone the element to avoid modifying the DOM
-        const elementClone = element.cloneNode(true);
-        const replyBarClone = elementClone.querySelector(
-          '[class*="replyBar-"]'
-        );
-        if (replyBarClone) {
-          replyBarClone.remove();
-        }
-        content = elementClone.textContent || "";
+      // Find the actual message content after removing replies
+      const possibleContent =
+        elementForContentExtraction.querySelector(
+          '[class*="message-content-"]'
+        ) ||
+        elementForContentExtraction.querySelector('[class*="messageContent-"]');
+
+      if (possibleContent) {
+        content = possibleContent.textContent || "";
+      } else {
+        // If all else fails, get text content from non-header parts
+        const headerEl = elementForContentExtraction.querySelector("h3");
+        if (headerEl) headerEl.remove();
+
+        // Get timestamp elements and remove them too
+        const timeEls = elementForContentExtraction.querySelectorAll("time");
+        timeEls.forEach((el) => el.remove());
+
+        content = elementForContentExtraction.textContent?.trim() || "";
       }
 
       // If still no author found but we have previous author
