@@ -17,7 +17,7 @@ A Chrome extension that allows you to export Discord conversations to a TXT file
 1. Clone this repository:
 
    ```
-   git clone https://github.com/yourusername/discord-to-txt.git
+   git clone https://github.com/mplazax/discord-to-txt.git
    cd discord-to-txt
    ```
 
