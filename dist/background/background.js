@@ -67,6 +67,7 @@ class BackgroundService {
 
     // Return true if we need to send a response asynchronously
     sendResponse({ received: true });
+    return true;
   }
 
   /**
@@ -84,33 +85,76 @@ class BackgroundService {
     // Clear any existing data
     this.conversationData[tabId] = [];
 
-    // Send message to content script to start scraping
-    if (this.chrome.tabs) {
-      this.chrome.tabs.sendMessage(
-        tabId,
-        { action: "scrapeConversation" },
-        (response) => {
-          if (this.chrome.runtime?.lastError) {
-            console.error(
-              "Error sending message to content script:",
-              this.chrome.runtime.lastError
-            );
-            this.handleError(
-              tabId,
-              "Failed to communicate with content script"
-            );
+    try {
+      // First, notify popup that process has started
+      if (this.chrome.runtime) {
+        this.chrome.runtime.sendMessage({
+          action: "progressUpdate",
+          tabId,
+          status: "Injecting content script...",
+        });
+      }
+
+      // Make sure the content script is injected
+      await this.injectContentScript(tabId);
+
+      // Send message to content script to start scraping
+      if (this.chrome.tabs) {
+        this.chrome.tabs.sendMessage(
+          tabId,
+          { action: "scrapeConversation" },
+          (response) => {
+            if (this.chrome.runtime?.lastError) {
+              console.error(
+                "Error sending message to content script:",
+                this.chrome.runtime.lastError
+              );
+              this.handleError(
+                tabId,
+                "Failed to communicate with content script"
+              );
+            }
           }
-        }
+        );
+      }
+
+      // Notify popup that process has progressed
+      if (this.chrome.runtime) {
+        this.chrome.runtime.sendMessage({
+          action: "progressUpdate",
+          tabId,
+          status: "Initializing scraping process...",
+        });
+      }
+    } catch (error) {
+      console.error("Error starting download process:", error);
+      this.handleError(
+        tabId,
+        "Failed to inject content script: " + error.message
       );
     }
+  }
 
-    // Notify popup that process has started
-    if (this.chrome.runtime) {
-      this.chrome.runtime.sendMessage({
-        action: "progressUpdate",
-        tabId,
-        status: "Initializing scraping process...",
+  /**
+   * Injects the content script into the tab
+   */
+  async injectContentScript(tabId) {
+    // Check if the scripting API is available
+    if (!chrome.scripting) {
+      throw new Error("Scripting API not available");
+    }
+
+    try {
+      // Inject the content script
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content/content.js"],
       });
+
+      console.log("Content script injected successfully");
+    } catch (error) {
+      console.error("Failed to inject content script:", error);
+      throw error;
     }
   }
 
