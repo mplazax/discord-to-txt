@@ -201,5 +201,44 @@ describe("BackgroundService", () => {
       // Should not attempt to download with no data
       expect(chrome.downloads.download).not.toHaveBeenCalled();
     });
+
+    it("should handle environments where URL.createObjectURL is not available", async () => {
+      // Save original URL object
+      const originalURL = global.URL;
+
+      // Mock URL to simulate service worker environment where createObjectURL is not available
+      global.URL = {
+        ...originalURL,
+        createObjectURL: undefined,
+        revokeObjectURL: jest.fn(),
+      } as any;
+
+      // Setup test data
+      const tabId = 123;
+      backgroundService.conversationData[tabId] = [
+        {
+          author: "User1",
+          content: "Hello",
+          timestamp: "2023-01-01T12:00:00Z",
+        },
+      ];
+
+      // Mock chrome downloads API
+      backgroundService.chrome.downloads = {
+        download: jest.fn().mockResolvedValue(true),
+      } as any;
+
+      // Call the method
+      await backgroundService.completeDownload(tabId);
+
+      // Verify download was triggered with data URL instead of blob URL
+      expect(backgroundService.chrome.downloads.download).toHaveBeenCalled();
+      const downloadArg =
+        backgroundService.chrome.downloads.download.mock.calls[0][0];
+      expect(downloadArg.url).toMatch(/^data:text\/plain;base64,/);
+
+      // Restore original URL
+      global.URL = originalURL;
+    });
   });
 });

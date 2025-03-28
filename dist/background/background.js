@@ -203,13 +203,25 @@ class BackgroundService {
       // Format data into text
       const formattedText = this.formatData(messages);
 
-      // Create a blob and download it
-      const blob = new Blob([formattedText], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-
       // Generate filename with date
       const date = new Date().toISOString().split("T")[0];
       const filename = `discord-conversation-${date}.txt`;
+
+      // Create download URL - use data URL instead of Blob URL
+      // for service worker compatibility
+      let url;
+      try {
+        // Try using Blob first, which is more efficient for large files
+        const blob = new Blob([formattedText], { type: "text/plain" });
+        url = URL.createObjectURL(blob);
+      } catch (error) {
+        // Fallback to data URL if URL.createObjectURL is not available
+        console.log(
+          "URL.createObjectURL not available, using data URL instead"
+        );
+        const base64Data = btoa(unescape(encodeURIComponent(formattedText)));
+        url = `data:text/plain;base64,${base64Data}`;
+      }
 
       // Initiate download
       if (this.chrome.downloads) {
@@ -221,7 +233,14 @@ class BackgroundService {
       }
 
       // Clean up
-      URL.revokeObjectURL(url);
+      if (url.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.log("URL.revokeObjectURL failed but this is non-critical");
+        }
+      }
+
       delete this.conversationData[tabId];
       this.downloadInProgress[tabId] = false;
 
@@ -236,7 +255,10 @@ class BackgroundService {
       }
     } catch (error) {
       console.error("Error completing download:", error);
-      this.handleError(tabId, "Failed to create download file");
+      this.handleError(
+        tabId,
+        "Failed to create download file: " + error.message
+      );
     }
   }
 
