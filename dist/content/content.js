@@ -5,18 +5,25 @@
 
 // Define simple classes here instead of importing from TypeScript files
 class MessageExtractor {
-  extractMessageData(element) {
+  extractMessageData(element, previousAuthor = null) {
     // Generate a unique ID for this message
     const id =
       element.id ||
       `message-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Try different ways to extract the message content
-    let author = "Unknown User";
+    let author = previousAuthor || "Unknown User";
     let timestamp = null;
     let content = "";
+    let isPartOfSequence = false;
 
     try {
+      // Check if this is part of a sequence (grouped) message
+      isPartOfSequence =
+        !element.classList.contains("groupStart-") &&
+        element.getAttribute("aria-setsize") &&
+        element.getAttribute("aria-posinset") > 1;
+
       // Method 1: Standard Discord message structure
       if (element.id && element.id.startsWith("chat-messages-")) {
         const contents = element.querySelector("div");
@@ -24,6 +31,13 @@ class MessageExtractor {
           const header = contents.querySelector("h3");
           const usernameElement = header?.querySelector("span");
           const timestampElement = contents.querySelector("time");
+
+          // Exclude reply bar content
+          const replyBar = contents.querySelector('[class*="replyBar-"]');
+          if (replyBar) {
+            replyBar.remove(); // Remove temporarily to not include in text content
+          }
+
           const contentElement = contents.querySelector(
             'div[id^="message-content-"]'
           );
@@ -33,13 +47,34 @@ class MessageExtractor {
             timestamp = timestampElement.getAttribute("datetime");
           if (contentElement) content = contentElement.textContent || "";
 
-          return { id, author, timestamp, content };
+          // Add reply bar back if we removed it
+          if (replyBar && replyBar.parentNode) {
+            contents.appendChild(replyBar);
+          }
+
+          // If no author found but we have previous author and this looks like a sequence
+          if (
+            (author === "Unknown User" || !usernameElement) &&
+            previousAuthor &&
+            isPartOfSequence
+          ) {
+            author = previousAuthor;
+          }
+
+          return { id, author, timestamp, content, isPartOfSequence };
         }
       }
 
       // Method 2: Try with class name selectors
       const usernameElement = element.querySelector('[class*="username-"]');
       const timestampElement = element.querySelector("time[datetime]");
+
+      // Handle reply content correctly
+      const replyBar = element.querySelector('[class*="replyBar-"]');
+      if (replyBar) {
+        replyBar.remove(); // Remove temporarily
+      }
+
       const contentElement =
         element.querySelector('[class*="message-content-"]') ||
         element.querySelector('[class*="messageContent-"]');
@@ -49,9 +84,23 @@ class MessageExtractor {
         timestamp = timestampElement.getAttribute("datetime");
       if (contentElement) content = contentElement.textContent || "";
 
+      // Add reply bar back if we removed it
+      if (replyBar && replyBar.parentNode) {
+        element.appendChild(replyBar);
+      }
+
+      // If no author found but we have previous author and this looks like a sequence
+      if (
+        (author === "Unknown User" || !usernameElement) &&
+        previousAuthor &&
+        isPartOfSequence
+      ) {
+        author = previousAuthor;
+      }
+
       // If we found at least the content or the author, return a result
       if (content || author !== "Unknown User") {
-        return { id, author, timestamp, content };
+        return { id, author, timestamp, content, isPartOfSequence };
       }
 
       // Method 3: General approach
@@ -67,12 +116,25 @@ class MessageExtractor {
         }
       }
 
-      // Get all text content as a fallback
+      // Get all text content as a fallback, but exclude reply content
       if (!content) {
-        content = element.textContent || "";
+        // Clone the element to avoid modifying the DOM
+        const elementClone = element.cloneNode(true);
+        const replyBarClone = elementClone.querySelector(
+          '[class*="replyBar-"]'
+        );
+        if (replyBarClone) {
+          replyBarClone.remove();
+        }
+        content = elementClone.textContent || "";
       }
 
-      return { id, author, timestamp, content };
+      // If still no author found but we have previous author
+      if (author === "Unknown User" && previousAuthor) {
+        author = previousAuthor;
+      }
+
+      return { id, author, timestamp, content, isPartOfSequence };
     } catch (error) {
       console.error("Error extracting message data:", error);
       return null;
@@ -129,6 +191,7 @@ class ContentScript {
     this.processedMessageIds = new Set();
     this.extractedMessages = [];
     this.isScrapingActive = false;
+    this.lastAuthor = null;
   }
 
   initialize() {
@@ -191,12 +254,20 @@ class ContentScript {
 
     // Process each message
     for (const element of messageElements) {
-      const messageData = this.messageExtractor.extractMessageData(element);
+      const messageData = this.messageExtractor.extractMessageData(
+        element,
+        this.lastAuthor
+      );
 
       if (messageData && !this.processedMessageIds.has(messageData.id)) {
         this.processedMessageIds.add(messageData.id);
         this.extractedMessages.push(messageData);
         newMessagesCount++;
+
+        // Update last author if we have a valid one
+        if (messageData.author && messageData.author !== "Unknown User") {
+          this.lastAuthor = messageData.author;
+        }
       }
     }
 
