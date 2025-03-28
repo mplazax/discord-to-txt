@@ -11,7 +11,9 @@
     "test:file": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
-    "build": "mkdir -p dist && cp -r src/* dist/ && tsc --project tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "copy-files": "mkdir -p dist && cp -r src/icons src/popup/popup.html src/manifest.json dist/",
+    "build": "npm run clean && npm run copy-files && mkdir -p dist/content dist/background dist/popup && cp src/content/content.js dist/content/ && cp src/background/background.js dist/background/ && cp src/popup/popup.js dist/popup/",
     "prepare-icons": "convert -size 16x16 xc:#5865F2 src/icons/icon16.png && convert -size 32x32 xc:#5865F2 src/icons/icon32.png && convert -size 48x48 xc:#5865F2 src/icons/icon48.png && convert -size 128x128 xc:#5865F2 src/icons/icon128.png",
     "dev": "npm run build -- --watch",
     "typecheck": "tsc --noEmit",
@@ -32,7 +34,6 @@
     "@types/chrome": "^0.0.260",
     "@types/node": "^20.11.24",
     "@vitest/coverage-v8": "^1.3.1",
-    "canvas": "^3.1.0",
     "jsdom": "^26.0.0",
     "typescript": "^5.3.3",
     "vitest": "^1.3.1"
