@@ -60,16 +60,31 @@
         color: #72767d;
         text-align: center;
       }
+
+      .info {
+        font-size: 12px;
+        margin-top: 12px;
+        color: #b9bbbe;
+        text-align: center;
+        line-height: 1.4;
+      }
     </style>
   </head>
   <body>
     <h1>Discord Conversation Exporter</h1>
 
-    <div id="status">Ready</div>
+    <div id="status">Ready to download</div>
 
     <button id="downloadButton">Download Conversation</button>
 
-    <div class="footer">Navigate to a Discord conversation before using.</div>
+    <div class="info">
+      Works with regular channels and DMs.<br />
+      Make sure you're on a Discord conversation page.
+    </div>
+
+    <div class="footer">
+      The extension will automatically scroll up to load message history.
+    </div>
 
     <script src="popup.js"></script>
   </body>

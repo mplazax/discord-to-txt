@@ -1,22 +1,65 @@
 export class MessageExtractor {
     extractMessageData(element) {
-        if (!element.id.startsWith("chat-messages-")) {
+        // Generate a unique ID for this message
+        const id = element.id ||
+            `message-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Try different ways to extract the message content
+        let author = "Unknown User";
+        let timestamp = null;
+        let content = "";
+        try {
+            // Method 1: Standard Discord message structure
+            if (element.id.startsWith("chat-messages-")) {
+                const contents = element.querySelector("div");
+                if (contents) {
+                    const header = contents.querySelector("h3");
+                    const usernameElement = header?.querySelector("span");
+                    const timestampElement = contents.querySelector("time");
+                    const contentElement = contents.querySelector('div[id^="message-content-"]');
+                    if (usernameElement)
+                        author = usernameElement.textContent || author;
+                    if (timestampElement)
+                        timestamp = timestampElement.getAttribute("datetime");
+                    if (contentElement)
+                        content = contentElement.textContent || "";
+                    return { id, author, timestamp, content };
+                }
+            }
+            // Method 2: Try with class name selectors
+            const usernameElement = element.querySelector('[class*="username-"]');
+            const timestampElement = element.querySelector("time[datetime]");
+            const contentElement = element.querySelector('[class*="message-content-"]') ||
+                element.querySelector('[class*="messageContent-"]');
+            if (usernameElement)
+                author = usernameElement.textContent || author;
+            if (timestampElement)
+                timestamp = timestampElement.getAttribute("datetime");
+            if (contentElement)
+                content = contentElement.textContent || "";
+            // If we found at least the content or the author, return a result
+            if (content || author !== "Unknown User") {
+                return { id, author, timestamp, content };
+            }
+            // Method 3: General approach
+            // Find all spans, one might be the username
+            const spans = element.querySelectorAll("span");
+            for (const span of spans) {
+                if (span.className.includes("username") ||
+                    span.parentElement?.className.includes("username")) {
+                    author = span.textContent || author;
+                    break;
+                }
+            }
+            // Get all text content as a fallback
+            if (!content) {
+                content = element.textContent || "";
+            }
+            return { id, author, timestamp, content };
+        }
+        catch (error) {
+            console.error("Error extracting message data:", error);
             return null;
         }
-        const contents = element.querySelector("div");
-        if (!contents) {
-            return null;
-        }
-        const header = contents.querySelector("h3");
-        const username = header?.querySelector("span");
-        const timestamp = contents.querySelector("time");
-        const content = contents.querySelector('div[id^="message-content-"]');
-        return {
-            id: element.id,
-            author: username?.textContent || "Unknown User",
-            timestamp: timestamp?.getAttribute("datetime") || null,
-            content: content?.textContent || "",
-        };
     }
     formatMessageForExport(message) {
         let formattedTimestamp = "Unknown time";

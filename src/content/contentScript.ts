@@ -32,13 +32,30 @@ export class ContentScript {
    */
   initialize(): boolean {
     try {
-      // Find the scroll container
-      this.messageContainer = document.querySelector("div.scroller");
+      // Try multiple possible selectors for the message container
+      this.messageContainer =
+        document.querySelector("div.scroller") ||
+        document
+          .querySelector("[data-list-id='chat-messages']")
+          ?.closest(".scroller") ||
+        document.querySelector("[class*='scrollerBase']");
 
-      // Find the message list
-      this.messageList = document.querySelector(
-        'ol[data-list-id="chat-messages"]'
-      );
+      // Find the message list - try multiple selectors to handle different Discord UI versions
+      this.messageList =
+        document.querySelector('ol[data-list-id="chat-messages"]') ||
+        document.querySelector('[role="list"][data-list-id="chat-messages"]') ||
+        document.querySelector('[role="list"][class*="scrollerInner"]');
+
+      // If we still couldn't find the message list, try a more general approach
+      if (!this.messageList) {
+        const chatArea = document.querySelector('[class*="chat-"]');
+        if (chatArea) {
+          this.messageList = chatArea.querySelector('[role="list"]');
+        }
+      }
+
+      console.log("Message container:", this.messageContainer);
+      console.log("Message list:", this.messageList);
 
       // Return true only if both elements were found
       return !!(this.messageContainer && this.messageList);
@@ -57,10 +74,11 @@ export class ContentScript {
       return 0;
     }
 
-    // Find all message elements
-    const messageElements = this.messageList.querySelectorAll(
-      'li[id^="chat-messages-"]'
-    );
+    // Find all message elements - try multiple selectors
+    const messageElements =
+      this.messageList.querySelectorAll('li[id^="chat-messages-"]') ||
+      this.messageList.querySelectorAll('[class*="message-"]');
+
     let newMessagesCount = 0;
 
     // Process each message
